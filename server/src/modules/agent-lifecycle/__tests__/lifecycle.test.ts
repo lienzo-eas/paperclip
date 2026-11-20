@@ -16,7 +16,7 @@ import { errorHandler } from "../../../middleware/error-handler.js";
 import { createLifecycleDriver } from "../../../services/agent-lifecycle-driver.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { agents, approvals, projects, issues, heartbeatRuns, nativeRunFinalizations, budgetPolicies, environmentLeases, agentApiKeys, activityLog, agentConfigRevisions, userCompanyPreferences, companies, companyMemberships, principalPermissionGrants, plugins, pluginCompanySettings, createDb, type Db } from "@paperclipai/db";
+import { agents, approvals, projects, issues, heartbeatRuns, heartbeatRunEvents, nativeRunFinalizations, budgetPolicies, environmentLeases, agentApiKeys, activityLog, agentConfigRevisions, userCompanyPreferences, companies, companyMemberships, principalPermissionGrants, plugins, pluginCompanySettings, createDb, type Db } from "@paperclipai/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "../../../__tests__/helpers/embedded-postgres.js";
 import { createAgentLifecycle, configureAgentLifecycle } from "../../../services/agent-lifecycle.js";
@@ -148,6 +148,29 @@ const support = await getEmbeddedPostgresTestSupport();
     await createAgentLifecycle(db).retry(agent.id);
     await work.process(agent.id);
     expect((await current(agent.id)).lifecycleState).toBe("terminated");
+  });
+
+  it("treats a legacy run cancelled before its adapter started as stopped", async () => {
+    const agent = await hire();
+    const [run] = await db.insert(heartbeatRuns).values({ companyId, agentId: agent.id,
+      status: "cancelled", invocationSource: "on_demand", runtimeMode: "legacy", executionStage: "settled",
+      startedAt: new Date(), finishedAt: new Date(), errorCode: "issue_reassigned",
+      runnerProfileJson: { adapterDispatch: { adapterType: "claude_local" } },
+      resultJson: { stopReason: "cancelled", startupCancellation: { beforeNativeSelection: false },
+        cancellation: { source: "control_plane", expected: true, initiator: { type: "system" } } } }).returning();
+    await db.insert(heartbeatRunEvents).values({ companyId, runId: run.id, agentId: agent.id, seq: 1, eventType: "lifecycle" });
+    expect(await agentExecutionsHaveStopped(db, [agent.id])).toBe(true);
+    await db.insert(heartbeatRunEvents).values({ companyId, runId: run.id, agentId: agent.id, seq: 2, eventType: "adapter.invoke" });
+    expect(await agentExecutionsHaveStopped(db, [agent.id])).toBe(false);
+  });
+
+  it("keeps a legacy cancelled run without stop proof unresolved while preparation has not settled", async () => {
+    const agent = await hire();
+    await db.insert(heartbeatRuns).values({ companyId, agentId: agent.id,
+      status: "cancelled", invocationSource: "on_demand", runtimeMode: "legacy", executionStage: "dispatching",
+      startedAt: new Date(), finishedAt: new Date(),
+      runnerProfileJson: { adapterDispatch: { adapterType: "claude_local" } } });
+    expect(await agentExecutionsHaveStopped(db, [agent.id])).toBe(false);
   });
 
   it("does not cancel a reporting agent when its manager pauses", async () => {
