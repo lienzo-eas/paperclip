@@ -1108,6 +1108,14 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
       });
       if (staleness.outcome === "cancelled" || staleness.outcome === "deferred") {
         applyRunDispatchPostCommitEffects(staleness.postCommitEffects);
+        // Backport of upstream #21256: the stale run may have held the task's
+        // execution lock, and the new owner's wake was deferred behind it.
+        // Release the task and promote that wake, or the new owner never runs.
+        if (staleness.outcome === "cancelled" && staleness.errorCode === "issue_assignee_changed") {
+          await releaseIssueExecutionAndPromote(run, { suppressImmediateRecovery: true, deferredPostCommitEffects }).catch((err) => {
+            logger.warn({ err, runId: run.id, issueId }, "claimQueuedRun: new owner's wake will be promoted by recovery");
+          });
+        }
         logger.info(
           {
             runId: run.id,

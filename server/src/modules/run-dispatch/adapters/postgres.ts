@@ -907,6 +907,13 @@ export function createPostgresRunDispatchAdapter(
             ...(decision.errorCode === "execution_reconciliation_required"
               ? { executionWait: decision.details }
               : {}),
+            // A never-started queued run withheld at the gate did not reach the
+            // provider. Without this proof the release drain treats it as an
+            // unknown outcome and never promotes the wakes deferred behind it.
+            ...(decision.errorCode === "issue_assignee_changed" && expectedStatus === "queued" &&
+                !run.startedAt && !run.processPid
+              ? { executionRecovery: { kind: "stale_queued_run_withheld", providerWorkStarted: false } }
+              : {}),
             effectiveTimeoutSec: 0,
             timeoutConfigured: false,
             timeoutSource: "stale_queued_run_gate",

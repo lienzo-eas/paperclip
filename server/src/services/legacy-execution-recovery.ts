@@ -47,7 +47,8 @@ export function legacyExecutionNeedsReconciliation(
   // `scheduled_retry`: provider dispatch never began, so nothing can be replayed.
   // Likewise for a run the dispatcher cancelled right before provider handoff.
   if (run.status === "cancelled" &&
-      (evidence?.kind === "scheduled_retry_suppressed" || evidence?.kind === "dispatch_suppressed") &&
+      (evidence?.kind === "scheduled_retry_suppressed" || evidence?.kind === "dispatch_suppressed" ||
+        evidence?.kind === "stale_queued_run_withheld") &&
       evidence.providerWorkStarted === false) return false;
   if (run.status === "cancelled" && run.errorCode === "workspace_busy" &&
       evidence?.kind === "workspace_wait" && evidence.providerWorkStarted === false) return false;
