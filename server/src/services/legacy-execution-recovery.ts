@@ -43,6 +43,12 @@ export function legacyExecutionNeedsReconciliation(
   // a resource wait, not a failed provider attempt or permission to replay work.
   if (run.status === "cancelled" && (run.errorCode === "ai_connection_busy" || run.errorCode === "ai_connection_pool_exhausted") &&
       evidence?.kind === "ai_connection_wait" && evidence.providerWorkStarted === false) return false;
+  // A scheduled retry suppressed by the dispatch gate is cancelled while still
+  // `scheduled_retry`: provider dispatch never began, so nothing can be replayed.
+  // Likewise for a run the dispatcher cancelled right before provider handoff.
+  if (run.status === "cancelled" &&
+      (evidence?.kind === "scheduled_retry_suppressed" || evidence?.kind === "dispatch_suppressed") &&
+      evidence.providerWorkStarted === false) return false;
   if (run.status === "cancelled" && run.errorCode === "workspace_busy" &&
       evidence?.kind === "workspace_wait" && evidence.providerWorkStarted === false) return false;
   // Setup owns the bounded retry budget for temporary workspace scans. Its

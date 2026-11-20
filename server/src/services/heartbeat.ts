@@ -3533,6 +3533,14 @@ export function heartbeatService(
           const cancelled = await setRunStatusIfRunning(run.id, "cancelled", {
             finishedAt: new Date(), errorCode: "legacy_disposition_repair_suppressed",
             error: `Disposition repair suppressed: ${repairBlock}`,
+            // Suppressed before the provider handoff: record that no provider work
+            // started, so recovery does not hold the issue for unknown outcomes.
+            resultJson: {
+              stopReason: "legacy_disposition_repair_suppressed",
+              executionRecovery: { kind: "dispatch_suppressed", providerWorkStarted: false },
+              cancellation: { source: "control_plane", expected: true, initiator: { type: "system" },
+                reason: `Disposition repair suppressed: ${repairBlock}`, recordedAt: new Date().toISOString() },
+            },
           });
           if (cancelled.updated) {
             await setWakeupStatus(run.wakeupRequestId, "skipped", { finishedAt: new Date(), error: repairBlock });

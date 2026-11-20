@@ -689,6 +689,13 @@ export function createPostgresRunDispatchAdapter(
         finishedAt: input.now,
         error: input.reason,
         errorCode: input.errorCode,
+        // The row is still `scheduled_retry`, so no provider was dispatched.
+        // Record that proof; without it recovery treats the cancellation as an
+        // execution with unknown action outcomes and holds the issue.
+        resultJson: sql`coalesce(${heartbeatRuns.resultJson}, '{}'::jsonb) || ${JSON.stringify({
+          stopReason: input.errorCode,
+          executionRecovery: { kind: "scheduled_retry_suppressed", providerWorkStarted: false },
+        })}::jsonb`,
         updatedAt: input.now,
       })
       .where(
