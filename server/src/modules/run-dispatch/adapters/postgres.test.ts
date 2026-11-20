@@ -1449,8 +1449,14 @@ describeEmbeddedPostgres("run-dispatch postgres adapter", () => {
       if (outcome.outcome === "gate_suppressed") {
         expect(outcome.errorCode).toBe("issue_paused");
       }
-      const [row] = await db.select({ status: heartbeatRuns.status }).from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
+      const [row] = await db.select({ status: heartbeatRuns.status, resultJson: heartbeatRuns.resultJson })
+        .from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
       expect(row?.status).toBe("cancelled");
+      // Recovery must see that the suppressed retry never reached a provider.
+      expect(row?.resultJson).toMatchObject({
+        stopReason: "issue_paused",
+        executionRecovery: { kind: "scheduled_retry_suppressed", providerWorkStarted: false },
+      });
     });
 
     it(

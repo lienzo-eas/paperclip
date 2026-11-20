@@ -107,3 +107,29 @@ it("recognizes only an unclaimed pre-dispatch review wait receipt", () => {
     { resultJson: { ...run.resultJson, workspaceRestoreFailure: "restore_unsafe_archive" } },
   ]) expect(isPreDispatchReviewWait({ ...run, ...patch })).toBe(false);
 });
+
+it("does not hold an issue for a scheduled retry the dispatch gate suppressed before dispatch", () => {
+  const suppressed = {
+    runtimeMode: "legacy", status: "cancelled", errorCode: "issue_dependencies_blocked",
+    resultJson: {
+      stopReason: "issue_dependencies_blocked",
+      executionRecovery: { kind: "scheduled_retry_suppressed", providerWorkStarted: false },
+    },
+  };
+  expect(legacyExecutionNeedsReconciliation(suppressed)).toBe(false);
+  expect(legacyExecutionNeedsReconciliation({ ...suppressed, resultJson: {} })).toBe(true);
+  expect(legacyExecutionNeedsReconciliation({ ...suppressed, status: "failed" })).toBe(true);
+  expect(legacyExecutionNeedsReconciliation({ ...suppressed, resultJson: {
+    executionRecovery: { kind: "scheduled_retry_suppressed", providerWorkStarted: true },
+  } })).toBe(true);
+});
+
+it("does not hold an issue for a disposition repair suppressed right before provider dispatch", () => {
+  const suppressed = {
+    runtimeMode: "legacy", status: "cancelled", errorCode: "legacy_disposition_repair_suppressed",
+    resultJson: { executionRecovery: { kind: "dispatch_suppressed", providerWorkStarted: false } },
+  };
+  expect(legacyExecutionNeedsReconciliation(suppressed)).toBe(false);
+  expect(legacyExecutionNeedsReconciliation({ ...suppressed, resultJson: {} })).toBe(true);
+  expect(legacyExecutionNeedsReconciliation({ ...suppressed, status: "failed" })).toBe(true);
+});

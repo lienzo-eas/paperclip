@@ -324,9 +324,9 @@ export async function getExecutionBlocker(db: Db, companyId: string, issueId: st
     !["done", "cancelled"].includes(conversation.status) && await canRetryStoppedRun(db, run));
   const runError = run && canRetry && isPreDispatchReviewWait(run)
     ? "Waiting for review; this continuation never started."
-    : cancellation?.reason ?? (run?.status === "cancelled"
+    : cancellation?.reason ?? run?.error ?? (run?.status === "cancelled"
       ? "Execution was cancelled; its source was not recorded."
-      : run?.error);
+      : null);
   const [chatBinding] = eligibleContinuation || canRetry ? await db.select({
     state: chatConversations.state, endpointStatus: chatEndpoints.status,
     connectionStatus: toolConnections.status, connectionEnabled: toolConnections.enabled,
